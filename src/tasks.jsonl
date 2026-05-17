@@ -1,0 +1,4 @@
+{"id": "1", "payload": "Send report", "description": "Send PDF via email", "priority": "high"}
+{"id": "2", "payload": "Review code", "description": "Check pull request", "priority": "medium"}
+{"id": "3", "payload": "Deploy service", "description": "Deploy to production", "priority": "critical"}
+{"id": "4", "payload": "Update dependencies", "description": "Upgrade pip packages", "priority": "low"}

@@ -148,17 +148,17 @@ python -m src plugins
 
 1. **Чтение задач из .jsonl файла**
 ```bash
-python -m src read --jsonl tasks.jsonl
+python -m src read --jsonl src/tasks.jsonl
 ```
 
 2. **Чтение из stdin**
 ```bash
-printf "1:Отправить отчёт::high\n2:Проверить код\n" | python -m src read --stdin
+printf "1:Send report::high\n2:Review code\n" | python -m src read --stdin
 ```
 
 3. **Асинхронное выполнение задач**
 ```bash
-python -m src execute --jsonl tasks.jsonl -H print -H logging -c 8 -v
+python -m src execute --jsonl src/tasks.jsonl -H print -H logging -c 8 -v
 ```
 
 4. **Интерактивная проверка**
@@ -171,9 +171,9 @@ from src.executor.core import TaskExecutor
 from src.executor.handlers import PrintHandler
 
 queue = TaskQueue()
-queue.add(Task(id='1', payload='Отправить отчёт', priority='high'))
-queue.add(Task(id='2', payload='Проверить код', priority='medium'))
-queue.add(Task(id='3', payload='Задеплоить приложение', priority='critical'))
+queue.add(Task(id='1', payload='Send report', priority='high'))
+queue.add(Task(id='2', payload='Review code', priority='medium'))
+queue.add(Task(id='3', payload='Deploy application', priority='critical'))
 
 async def main():
     async with TaskExecutor(handlers=[PrintHandler()], concurrency=2) as executor:
@@ -187,9 +187,9 @@ asyncio.run(main())
 ## Формат .jsonl файла
 
 ```jsonl
-{"id": "1", "payload": "Отправить отчёт", "description": "Отправить PDF на почту", "priority": "high"}
-{"id": "2", "payload": "Проверить код"}
-{"id": "3", "payload": "Задеплоить сервис", "priority": "critical"}
+{"id": "1", "payload": "Send report", "description": "Send PDF via email", "priority": "high"}
+{"id": "2", "payload": "Review code"}
+{"id": "3", "payload": "Deploy service", "priority": "critical"}
 ```
 
 | Поле | Обязательное | Допустимые значения |
