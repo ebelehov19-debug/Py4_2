@@ -1,261 +1,90 @@
-# Платформа обработки задач — Лабораторные работы №1–4
-
-## Обзор
-
-Учебный проект, реализующий абстрактную платформу обработки задач.
-Каждая лабораторная работа добавляет новый слой архитектуры поверх предыдущего.
-
-```
-src/
-├── contracts/          # Лаб 1 & 2: контракты и модель задачи
-│   ├── exceptions.py   # Иерархия исключений
-│   ├── descriptors.py  # Data-дескрипторы валидации
-│   ├── task.py         # Класс Task
-│   ├── task_source.py  # Protocol TaskSource
-│   └── handler.py      # Protocol TaskHandler (Лаб 4)
-├── sources/            # Лаб 1: источники задач
-│   ├── repository.py   # Реестр плагинов
-│   ├── stdin.py        # Источник из stdin
-│   └── json.py         # Источник из .jsonl файла
-├── inbox/              # Лаб 3: очередь и процессор
-│   ├── core.py         # TaskProcessor
-│   └── task_queue.py   # TaskQueue с итератором и генераторами
-├── executor/           # Лаб 4: асинхронный исполнитель
-│   ├── core.py         # TaskExecutor (async context manager)
-│   └── handlers.py     # LoggingHandler, PrintHandler, DelayHandler, …
-└── cli.py              # CLI: read, execute, plugins
-```
-
----
-
-## Установка
-
-### 1. Клонировать репозиторий
-
-```bash
-git clone https://github.com/ebelehov19-debug/LABPY3
-cd LABPY3
-```
-
-### 2. Установить зависимости
-
-```bash
-python -m pip install typer pytest pytest-asyncio
-```
-
-> Для отчёта о покрытии тестами дополнительно:
-> ```bash
-> python -m pip install pytest-cov
-> ```
-
----
-
-## Запуск — быстрый старт
-
-```bash
-python -m src --help
-```
-
-Вывод:
-```
-Usage: python -m src [OPTIONS] COMMAND [ARGS]...
-
-  Платформа обработки задач: приём, очередь и асинхронное выполнение.
-
-Commands:
-  execute  Асинхронно выполнить задачи из указанных источников.
-  plugins  Показать список доступных плагинов источников задач.
-  read     Прочитать и вывести задачи из указанных источников.
-```
-
----
-
-## Команды CLI
-
-### `plugins` — список доступных плагинов
-
-```bash
-python -m src plugins
-```
-
-Вывод:
-```
-Available plugins:
-  • file-jsonl
-  • stdin
-```
-
----
-
-### `read` — чтение и вывод задач
-
-#### Из .jsonl файла
-
-```bash
-python -m src read --jsonl tasks.jsonl
-```
-
-Вывод:
-```
-[1] Отправить отчёт
-[2] Проверить код
-[3] Задеплоить сервис
-[4] Обновить зависимости
-
-Total tasks: 4
-```
-
-#### С фильтром по подстроке в payload
-
-```bash
-python -m src read --jsonl tasks.jsonl --contains "код"
-```
-
-Вывод:
-```
-[2] Проверить код
-
-Total tasks: 1
-```
-
-#### Из stdin (одна задача)
-
-```bash
-echo "task-1:Обработать заявку" | python -m src read --stdin
-```
-
-#### Из stdin (несколько задач, полный формат)
-
-```bash
-printf "1:Купить молоко\n2:Позвонить клиенту:Срочно:high\n3:Подготовить отчёт\n" | \
-  python -m src read --stdin
-```
-
-Формат строки stdin: `id:payload[:description[:priority]]`
-— `description` и `priority` необязательны, по умолчанию `priority = medium`
-
----
-
-### `execute` — асинхронное выполнение задач
-
-#### С обработчиком вывода (по умолчанию)
-
-```bash
-python -m src execute --jsonl tasks.jsonl
-```
-
-Вывод:
-```
-Загружено задач: 4
-Обработчики: print-handler
-Параллелизм: 4
-
-[1] Отправить отчёт
-[2] Проверить код
-[3] Задеплоить сервис
-[4] Обновить зависимости
-
- Готово. Обработано: 4  Ошибок: 0  Пропущено: 0
-```
-
-#### С обработчиком логирования
-
-```bash
-python -m src execute --jsonl tasks.jsonl -H logging
-```
-
-#### Оба обработчика одновременно
-
-```bash
-python -m src execute --jsonl tasks.jsonl -H print -H logging
-```
-
-#### С ограничением параллелизма и verbose-логами
-
-```bash
-python -m src execute --jsonl tasks.jsonl -c 2 -v
-```
-
-`-c 2` — максимум 2 задачи выполняются одновременно.
-`-v` — включает DEBUG-уровень логирования.
-
-#### Из stdin
-
-```bash
-printf "t1:Задача первая:Описание:high\nt2:Задача вторая\n" | \
-  python -m src execute --stdin -H logging -v
-```
-
-#### С фильтрацией при выполнении
-
-```bash
-python -m src execute --jsonl tasks.jsonl --contains "отчёт"
-```
-
-Выполнятся только задачи, в payload которых содержится подстрока «отчёт».
-
----
-
-## Формат файла .jsonl
-
-Каждая строка — отдельный JSON-объект:
-
-```jsonl
-{"id": "1", "payload": "Отправить отчёт", "description": "Отправить PDF на почту", "priority": "high"}
-{"id": "2", "payload": "Проверить код"}
-{"id": "3", "payload": "Задеплоить сервис", "priority": "critical"}
-{"id": "4", "payload": "Обновить зависимости", "priority": "low"}
-```
-
-| Поле | Обязательное | Допустимые значения |
-|------|:---:|---|
-| `id` | да | любая непустая строка (до 64 символов) |
-| `payload` | да | любые данные |
-| `description` | нет | строка до 1024 символов |
-| `priority` | нет | `low`, `medium` (умолч.), `high`, `critical` |
-
----
-
-## Допустимые статусы задачи
-
-| Статус | Описание |
-|--------|----------|
-| `pending` | Ожидает выполнения (начальный) |
-| `in_progress` | Выполняется |
-| `completed` | Успешно завершена |
-| `failed` | Завершена с ошибкой |
-| `blocked` | Заблокирована |
-
-Переходы `completed → *` и `failed → *` запрещены дескриптором `StatusField`.
-
----
-
-## Запуск тестов
-
-```bash
-# Все тесты
-python -m pytest tests/ -v
-
-# Только Лаб 4 (исполнитель)
-python -m pytest tests/test_executor.py -v
-
-# С отчётом о покрытии
-python -m pytest tests/ --cov=src --cov-report=term-missing
-```
-
----
-
-## Архитектура Лаб 4 — TaskExecutor
-
+# Лабораторная работа №4: Платформа обработки задач (дескрипторы, протоколы, async)
+
+## Цель работы
+Освоить реализацию data-дескрипторов Python, структурной типизации через Protocol, асинхронных контекстных менеджеров и паттерна реестра плагинов на примере платформы обработки задач. Научиться разрабатывать async-исполнитель с управлением параллелизмом через `asyncio.Semaphore` и проектировать расширяемый CLI.
+
+## Постановка задачи
+Необходимо расширить платформу обработки задач из предыдущей лабораторной, добавив слои валидации, асинхронного выполнения и CLI. Платформа должна поддерживать несколько источников задач, систему обработчиков и контроль параллелизма.
+
+**Ключевые компоненты:**
+
+### Дескрипторы (src/contracts/descriptors.py)
+- `ValidatedField` — базовый data-дескриптор (`__get__`, `__set__`, `__set_name__`)
+- `StringField` — валидация строк с ограничением длины
+- `PriorityField` — допустимые значения: `low`, `medium`, `high`, `critical`
+- `StatusField` — валидация статусов и проверка допустимых переходов
+
+### Исключения (src/contracts/exceptions.py)
+- `TaskError` — базовое исключение иерархии
+- `TaskValidationError` — ошибка валидации полей задачи
+- `InvalidTaskStatusTransitionError` — недопустимый переход статуса
+
+### Протоколы (src/contracts/)
+- `TaskSource` — структурный контракт для источников задач (метод `fetch`)
+- `TaskHandler` — структурный контракт для обработчиков задач (метод `handle`)
+
+### Источники задач (src/sources/)
+- `StdinLineSource` — чтение задач из stdin, формат: `id:payload[:description[:priority]]`
+- `JsonlSource` — чтение задач из `.jsonl`-файла (по одному JSON-объекту на строку)
+- Реестр плагинов `REGISTRY` с декоратором `@register_source`
+
+### Асинхронный исполнитель (src/executor/)
+- `TaskExecutor` — `async with`-контекстный менеджер, управляет параллелизмом через `asyncio.Semaphore`
+- `LoggingHandler`, `PrintHandler`, `DelayHandler`, `CallbackHandler`, `FailingHandler` — реализации протокола `TaskHandler`
+
+### CLI (src/cli.py)
+- `plugins` — список зарегистрированных плагинов источников
+- `read` — чтение и вывод задач с фильтром `--contains`
+- `execute` — асинхронное выполнение с выбором обработчика `-H` и параллелизма `-c`
+
+## Технические требования
+- реализация data-дескрипторов с методами `__get__`, `__set__`, `__set_name__`
+- использование `Protocol` с `@runtime_checkable` для структурной типизации
+- реализация `__aenter__` / `__aexit__` для управления жизненным циклом исполнителя
+- контроль параллелизма через `asyncio.Semaphore`
+- паттерн реестра плагинов с декоратором `@register_source`
+- корректная обработка переходов статусов задачи
+- совместимость с инструментами asyncio: `gather`, `sleep`
+
+## Чему я научился
+- Реализации data-дескрипторов и автоматическому вызову `__set_name__`
+- Определению структурных контрактов через `Protocol` без наследования
+- Написанию асинхронных контекстных менеджеров (`async with`)
+- Управлению параллелизмом через `asyncio.Semaphore`
+- Паттерну реестра плагинов с декораторами
+- Проектированию расширяемого CLI с Typer
+- Тестированию async-кода с `pytest-asyncio`
+
+## Дескрипторы
+
+### ValidatedField — базовый дескриптор
+- Реализует `__get__`, `__set__`, `__set_name__` для автоматической привязки имён
+- Хранит значение в `_<name>` атрибуте экземпляра
+- `__set__` вызывает `validate(value)` перед сохранением
+
+### PriorityField — валидация приоритета
+- Допустимые значения: `low`, `medium`, `high`, `critical`
+- Независим от регистра при проверке
+- При ошибке бросает `TaskValidationError`
+
+### StatusField — валидация статуса и переходов
+- Допустимые статусы: `pending`, `in_progress`, `completed`, `failed`, `blocked`
+- Запрещает изменение статуса из `completed` и `failed` (конечные состояния)
+- Из `blocked` допустимы переходы только в `pending` или `failed`
+- При нарушении бросает `InvalidTaskStatusTransitionError`
+
+## Асинхронный исполнитель
+
+### TaskExecutor
 ```
 async with TaskExecutor(handlers=[...], concurrency=4) as executor:
     await executor.run(queue)
 ```
 
-1. `__aenter__` — создаёт `asyncio.Semaphore`, сбрасывает статистику, логирует старт.
-2. `run(queue)` — пропускает неготовые задачи, запускает `asyncio.gather` по остальным.
-3. `_process_task(task)` — захватывает semaphore, меняет статус на `in_progress`, вызывает все обработчики последовательно. При исключении — `failed`.
-4. `__aexit__` — логирует итоговую статистику, освобождает ресурсы.
+1. `__aenter__` — создаёт `asyncio.Semaphore`, сбрасывает статистику
+2. `run(queue)` — пропускает неготовые задачи, запускает `asyncio.gather`
+3. `_process_task(task)` — захватывает semaphore, меняет статус на `in_progress`, вызывает обработчики. При исключении — переводит в `failed`
+4. `__aexit__` — логирует итоговую статистику, освобождает ресурсы
 
 ### Обработчики
 
@@ -263,6 +92,122 @@ async with TaskExecutor(handlers=[...], concurrency=4) as executor:
 |-------|-----------|----------|
 | `PrintHandler` | `print` | Печатает задачу в stdout |
 | `LoggingHandler` | `logging` | Пишет задачу в `logging` |
-| `DelayHandler` | — | `asyncio.sleep(delay)` — имитация I/O |
-| `CallbackHandler` | — | Произвольный `async` колбэк |
+| `DelayHandler` | — | Имитирует I/O через `asyncio.sleep` |
+| `CallbackHandler` | — | Произвольный `async`-колбэк |
 | `FailingHandler` | — | Всегда бросает `RuntimeError` (для тестов) |
+
+## Протоколы
+
+### TaskSource
+```python
+class TaskSource(Protocol):
+    name: str
+    def fetch(self) -> Iterable[Task]: ...
+```
+
+### TaskHandler
+```python
+class TaskHandler(Protocol):
+    name: str
+    async def handle(self, task: Task) -> None: ...
+```
+
+Оба протокола помечены `@runtime_checkable`, что позволяет использовать `isinstance()` без наследования.
+
+## Инструкции по запуску
+
+1. **Клонирование репозитория**
+```bash
+git clone https://github.com/ebelehov19-debug/LABPY3
+cd LABPY3
+```
+
+2. **Создание виртуального окружения**
+```bash
+python -m venv .venv
+source .venv/bin/activate  # Linux/Mac
+.venv\Scripts\activate     # Windows
+```
+
+3. **Установка зависимостей**
+```bash
+pip install typer pytest pytest-asyncio
+```
+
+4. **Просмотр команд**
+```bash
+python -m src --help
+```
+
+5. **Просмотр плагинов**
+```bash
+python -m src plugins
+```
+
+## Примеры использования программы
+
+1. **Чтение задач из .jsonl файла**
+```bash
+python -m src read --jsonl tasks.jsonl
+```
+
+2. **Чтение из stdin**
+```bash
+printf "1:Отправить отчёт::high\n2:Проверить код\n" | python -m src read --stdin
+```
+
+3. **Асинхронное выполнение задач**
+```bash
+python -m src execute --jsonl tasks.jsonl -H print -H logging -c 8 -v
+```
+
+4. **Интерактивная проверка**
+```bash
+python -c "
+import asyncio
+from src.contracts.task import Task
+from src.inbox.task_queue import TaskQueue
+from src.executor.core import TaskExecutor
+from src.executor.handlers import PrintHandler
+
+queue = TaskQueue()
+queue.add(Task(id='1', payload='Отправить отчёт', priority='high'))
+queue.add(Task(id='2', payload='Проверить код', priority='medium'))
+queue.add(Task(id='3', payload='Задеплоить приложение', priority='critical'))
+
+async def main():
+    async with TaskExecutor(handlers=[PrintHandler()], concurrency=2) as executor:
+        await executor.run(queue)
+        print(executor.stats)
+
+asyncio.run(main())
+"
+```
+
+## Формат .jsonl файла
+
+```jsonl
+{"id": "1", "payload": "Отправить отчёт", "description": "Отправить PDF на почту", "priority": "high"}
+{"id": "2", "payload": "Проверить код"}
+{"id": "3", "payload": "Задеплоить сервис", "priority": "critical"}
+```
+
+| Поле | Обязательное | Допустимые значения |
+|------|:---:|---|
+| `id` | да | непустая строка до 64 символов |
+| `payload` | да | любые данные |
+| `description` | нет | строка до 1024 символов |
+| `priority` | нет | `low`, `medium` (умолч.), `high`, `critical` |
+
+## Запуск тестов
+
+1. **Запуск всех тестов**
+```bash
+python -m pytest tests/ -v
+```
+
+2. **Только тесты исполнителя**
+```bash
+python -m pytest tests/test_executor.py -v
+```
+
