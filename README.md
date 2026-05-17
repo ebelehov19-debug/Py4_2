@@ -118,8 +118,8 @@ class TaskHandler(Protocol):
 
 1. **Клонирование репозитория**
 ```bash
-git clone https://github.com/ebelehov19-debug/LABPY3
-cd LABPY3
+https://github.com/ebelehov19-debug/Py4_2
+cd Py4_2
 ```
 
 2. **Создание виртуального окружения**
